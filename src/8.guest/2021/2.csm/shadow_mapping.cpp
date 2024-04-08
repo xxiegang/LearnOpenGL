@@ -30,6 +30,7 @@ void drawCascadeVolumeVisualizers(const std::vector<glm::mat4>& lightMatrices, S
 const unsigned int SCR_WIDTH = 2560;
 const unsigned int SCR_HEIGHT = 1440;
 
+bool useLightBoundSphere = true;
 // framebuffer size
 int fb_width;
 int fb_height;
@@ -68,7 +69,7 @@ std::vector<glm::mat4> lightMatricesCache;
 
 int main()
 {
-    //generator.seed(2);
+    generator.seed(2);
     // glfw: initialize and configure
     // ------------------------------
     glfwInit();
@@ -558,7 +559,13 @@ void processInput(GLFWwindow *window)
     static int cPress = GLFW_RELEASE;
     if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE && cPress == GLFW_PRESS)
     {
-        lightMatricesCache = getLightSpaceMatrices();
+        if (lightMatricesCache.empty()) {
+            lightMatricesCache = getLightSpaceMatrices();
+        }
+        else {
+            lightMatricesCache.clear();
+        }
+        
     }
     cPress = glfwGetKey(window, GLFW_KEY_C);
 }
@@ -680,46 +687,58 @@ glm::mat4 getLightSpaceMatrix(const float nearPlane, const float farPlane)
     }
     center /= corners.size();
 
-    const auto lightView = glm::lookAt(center + lightDir, center, glm::vec3(0.0f, 1.0f, 0.0f));
+    if (useLightBoundSphere) {
+        float radius = 0.0;
+        for (const auto& v : corners)
+        {
+            radius = glm::max(radius, glm::length(center - glm::vec3(v)));
+        }
+        const auto lightView = glm::lookAt(center + lightDir * radius, center, glm::vec3(0.0f, 1.0f, 0.0f));
+        const glm::mat4 lightProjection = glm::ortho(-radius, radius, -radius, radius, 0.0f, radius * 2);
+        return lightProjection * lightView;
+    }
+    else {
+        const auto lightView = glm::lookAt(center + lightDir, center, glm::vec3(0.0f, 1.0f, 0.0f));
 
-    float minX = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::lowest();
-    float minY = std::numeric_limits<float>::max();
-    float maxY = std::numeric_limits<float>::lowest();
-    float minZ = std::numeric_limits<float>::max();
-    float maxZ = std::numeric_limits<float>::lowest();
-    for (const auto& v : corners)
-    {
-        const auto trf = lightView * v;
-        minX = std::min(minX, trf.x);
-        maxX = std::max(maxX, trf.x);
-        minY = std::min(minY, trf.y);
-        maxY = std::max(maxY, trf.y);
-        minZ = std::min(minZ, trf.z);
-        maxZ = std::max(maxZ, trf.z);
-    }
+        float minX = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float minY = std::numeric_limits<float>::max();
+        float maxY = std::numeric_limits<float>::lowest();
+        float minZ = std::numeric_limits<float>::max();
+        float maxZ = std::numeric_limits<float>::lowest();
+        for (const auto& v : corners)
+        {
+            const auto trf = lightView * v;
+            minX = std::min(minX, trf.x);
+            maxX = std::max(maxX, trf.x);
+            minY = std::min(minY, trf.y);
+            maxY = std::max(maxY, trf.y);
+            minZ = std::min(minZ, trf.z);
+            maxZ = std::max(maxZ, trf.z);
+        }
 
-    // Tune this parameter according to the scene
-    constexpr float zMult = 10.0f;
-    if (minZ < 0)
-    {
-        minZ *= zMult;
-    }
-    else
-    {
-        minZ /= zMult;
-    }
-    if (maxZ < 0)
-    {
-        maxZ /= zMult;
-    }
-    else
-    {
-        maxZ *= zMult;
-    }
+        // Tune this parameter according to the scene
+        constexpr float zMult = 10.0f;
+        if (minZ < 0)
+        {
+            minZ *= zMult;
+        }
+        else
+        {
+            minZ /= zMult;
+        }
+        if (maxZ < 0)
+        {
+            maxZ /= zMult;
+        }
+        else
+        {
+            maxZ *= zMult;
+        }
 
-    const glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
-    return lightProjection * lightView;
+        const glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
+        return lightProjection * lightView;
+    }    
 }
 
 std::vector<glm::mat4> getLightSpaceMatrices()
