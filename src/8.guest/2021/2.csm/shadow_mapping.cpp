@@ -47,7 +47,13 @@ float cameraFarPlane = 500.0f;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+struct Sphere {
+    glm::vec3 center;
+    float radius;
+};
+
 std::vector<float> shadowCascadeLevels{ cameraFarPlane / 50.0f, cameraFarPlane / 25.0f, cameraFarPlane / 10.0f, cameraFarPlane / 2.0f };
+std::vector<Sphere> shadowCascadeSphere(shadowCascadeLevels.size() + 1, { glm::vec3(0, 0, 0), 0.0});
 int debugLayer = 0;
 
 // meshes
@@ -262,9 +268,17 @@ int main()
         shader.setVec3("lightDir", lightDir);
         shader.setFloat("farPlane", cameraFarPlane);
         shader.setInt("cascadeCount", shadowCascadeLevels.size());
+        shader.setInt("useLightSplitSphere", useLightBoundSphere ? 1 : 0);
         for (size_t i = 0; i < shadowCascadeLevels.size(); ++i)
         {
             shader.setFloat("cascadePlaneDistances[" + std::to_string(i) + "]", shadowCascadeLevels[i]);
+        }
+        if (useLightBoundSphere) {
+            for (size_t i = 0; i < shadowCascadeLevels.size() + 1; ++i)
+            {
+                shader.setVec3("cascadeSphereCenter[" + std::to_string(i) + "]", shadowCascadeSphere[i].center);
+                shader.setFloat("cascadeSphereRadius[" + std::to_string(i) + "]", shadowCascadeSphere[i].radius);
+            }
         }
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, woodTexture);
@@ -673,7 +687,7 @@ std::vector<glm::vec4> getFrustumCornersWorldSpace(const glm::mat4& proj, const 
     return getFrustumCornersWorldSpace(proj * view);
 }
 
-glm::mat4 getLightSpaceMatrix(const float nearPlane, const float farPlane)
+glm::mat4 getLightSpaceMatrix(const float nearPlane, const float farPlane, Sphere* outSphere)
 {
     const auto proj = glm::perspective(
         glm::radians(camera.Zoom), (float)fb_width / (float)fb_height, nearPlane,
@@ -692,6 +706,9 @@ glm::mat4 getLightSpaceMatrix(const float nearPlane, const float farPlane)
         for (const auto& v : corners)
         {
             radius = glm::max(radius, glm::length(center - glm::vec3(v)));
+        }
+        if (outSphere) {
+            *outSphere = { center, radius };
         }
         const auto lightView = glm::lookAt(center + lightDir * radius, center, glm::vec3(0.0f, 1.0f, 0.0f));
         const glm::mat4 lightProjection = glm::ortho(-radius, radius, -radius, radius, 0.0f, radius * 2);
@@ -746,17 +763,21 @@ std::vector<glm::mat4> getLightSpaceMatrices()
     std::vector<glm::mat4> ret;
     for (size_t i = 0; i < shadowCascadeLevels.size() + 1; ++i)
     {
+        Sphere sphere;
         if (i == 0)
         {
-            ret.push_back(getLightSpaceMatrix(cameraNearPlane, shadowCascadeLevels[i]));
+            ret.push_back(getLightSpaceMatrix(cameraNearPlane, shadowCascadeLevels[i], &sphere));
         }
         else if (i < shadowCascadeLevels.size())
         {
-            ret.push_back(getLightSpaceMatrix(shadowCascadeLevels[i - 1], shadowCascadeLevels[i]));
+            ret.push_back(getLightSpaceMatrix(shadowCascadeLevels[i - 1], shadowCascadeLevels[i], &sphere));
         }
         else
         {
-            ret.push_back(getLightSpaceMatrix(shadowCascadeLevels[i - 1], cameraFarPlane));
+            ret.push_back(getLightSpaceMatrix(shadowCascadeLevels[i - 1], cameraFarPlane, &sphere));
+        }
+        if (useLightBoundSphere) {
+            shadowCascadeSphere[i] = sphere;
         }
     }
     return ret;
