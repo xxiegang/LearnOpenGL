@@ -1,11 +1,12 @@
 #version 330 core
 out vec4 FragColor;
 
-in vec2 TexCoords;
+//in vec2 TexCoords;
 
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
+uniform vec2 gScreenSize;
 
 struct Light {
     vec3 Position;
@@ -22,6 +23,7 @@ uniform vec3 viewPos;
 void main()
 {             
     // retrieve data from gbuffer
+    vec2 TexCoords = gl_FragCoord.xy / gScreenSize;
     vec3 FragPos = texture(gPosition, TexCoords).rgb;
     vec3 Normal = texture(gNormal, TexCoords).rgb;
     vec3 Diffuse = texture(gAlbedoSpec, TexCoords).rgb;

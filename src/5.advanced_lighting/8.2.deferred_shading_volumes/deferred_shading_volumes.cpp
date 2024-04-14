@@ -260,7 +260,10 @@ int main()
         glDrawBuffer(GL_COLOR_ATTACHMENT3);
         glClear(GL_COLOR_BUFFER_BIT);
         glDisable(GL_DEPTH_TEST);
-        //glStencilFunc(GL_NOTEQUAL, 0, 0xff);
+
+        glStencilFunc(GL_NOTEQUAL, 0, 0xff);
+        glCullFace(GL_FRONT);
+
         shaderLightingPass.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -268,6 +271,10 @@ int main()
         glBindTexture(GL_TEXTURE_2D, gNormal);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
+        shaderLightingPass.setVec3("viewPos", camera.Position);
+        shaderLightingPass.setMat4("projection", projection);
+        shaderLightingPass.setMat4("view", view);
+        shaderLightingPass.setVec2("gScreenSize", glm::vec2(SCR_WIDTH, SCR_HEIGHT));
         // send light relevant uniforms
         for (unsigned int i = 0; i < lightPositions.size(); i++)
         {
@@ -283,11 +290,17 @@ int main()
             const float maxBrightness = std::fmaxf(std::fmaxf(lightColors[i].r, lightColors[i].g), lightColors[i].b);
             float radius = (-linear + std::sqrt(linear * linear - 4 * quadratic * (constant - (256.0f / 5.0f) * maxBrightness))) / (2.0f * quadratic);
             shaderLightingPass.setFloat("lights[" + std::to_string(i) + "].Radius", radius);
-        }
-        shaderLightingPass.setVec3("viewPos", camera.Position);
-        // finally render quad
-        renderQuad();
 
+            model = glm::translate(model, lightPositions[i]);
+            model = glm::scale(model, glm::vec3(radius));
+            shaderLightingPass.setMat4("model", model);
+            sphere.Draw(shaderStencilPass);
+        }
+
+        // finally render quad
+        //renderQuad();
+
+        glCullFace(GL_BACK);
         glDisable(GL_STENCIL_TEST);
         // 2.5. copy content of geometry's depth buffer to default framebuffer's depth buffer
         // ----------------------------------------------------------------------------------
@@ -299,27 +312,10 @@ int main()
         // depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
         glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         glReadBuffer(GL_COLOR_ATTACHMENT3);
+
         glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        //GLenum error;
-        //while ((error = glGetError()) != GL_NO_ERROR) {
-        //    switch (error) {
-        //    case GL_INVALID_ENUM:
-        //        printf("OpenGL Error: GL_INVALID_ENUM\n");
-        //        break;
-        //    case GL_INVALID_VALUE:
-        //        printf("OpenGL Error: GL_INVALID_VALUE\n");
-        //        break;
-        //    case GL_INVALID_OPERATION:
-        //        printf("OpenGL Error: GL_INVALID_OPERATION\n");
-        //        break;
-        //        // Add more cases for other possible errors
-        //    default:
-        //        printf("OpenGL Error: %d\n", error);
-        //        break;
-        //    }
-        //}
 
         // 3. render lights on top of scene
         // --------------------------------
